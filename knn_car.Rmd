@@ -1,0 +1,71 @@
+---
+title: "Using K-nearest Neighbors to predict car price"
+output: html_notebook
+---
+
+data source: https://archive.ics.uci.edu/ml/datasets/automobile
+use machine leaning algorithm k-nearest neighbors to predict dealership car price based on body style, engine type, and horse power. 
+
+load the libraries
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(caret)
+```
+read the data in a tibble called cars
+add colunm names
+determine what columns are numeric
+remove rows with missing values
+```{r}
+cars <- read_csv("imports-85.data", col_names = FALSE, na = c("?"))
+colnames(cars) <- c("symboling","normalized_losses", "make", "fuel_type", "aspiration", "num_doors", "body_style", "drive_wheels", "engine_location", "wheel_base", "length", "width", "height", "curb_weight", "engine_type", "num_cylinders", "engine_size", "fuel_system", "bore", "stroke", "compression_ratio", "horsepower", "peak_rpm", "city_mpg", "highway_mpg", "price")
+cars <- Filter(is.numeric, cars)
+cars2 <- drop_na(cars) 
+```
+
+create a lattice plot in caret
+observations: 
+negative associated with price: city_mpg, highway_mpg, 
+positive associated with price: curb_weight, engine_size, bore, horsepower, wheel_base, length, width
+no association: peak_rpm, stroke, compression_ratio, symboling, normalized_losses, height
+
+potential predictors: city_mpg + engine_size
+What about make which would contribute a lot but is not numeric?
+What about collinearity? Does it matter in this case?
+Remove the columns that has no association, and then remove rows with missing value
+
+```{r}
+featurePlot(cars, cars$price)
+cars2 <- cars %>%
+  select(-peak_rpm, -stroke, -compression_ratio, -symboling, -normalized_losses, -height) %>%
+  drop_na()
+```
+
+creat a training set of 80% and test set of 20% of the data
+set up trainControl() to use cross-validation with 5 folds
+set up a hyperparameter grid of 1 to 20
+train the initial model (price ~ city_mpg + engine_size)
+Then try the model with all the relevant predictors, the latter has a smaller RMSE and is better.
+
+```{r}
+training_indics <- createDataPartition(y = cars2[["price"]], p = 0.8, list = FALSE)
+training_rows <- cars2[training_indics, ]
+test_rows <- cars2[-training_indics, ]
+
+train_control <- trainControl(method = "cv", number = 5)
+knn_grid <- expand.grid(k = 1:20)
+knn_model <- train(price ~ city_mpg + engine_size + highway_mpg + curb_weight + bore + horsepower + wheel_base + length + width,
+                   data = training_rows, method = "knn", 
+                  trControl = train_control,
+                  preProcess = c("center","scale"),
+                  tuneGrid = knn_grid)
+knn_model
+knn_model$resample
+```
+evaluate the model!
+The RMSE from the testing data is comparable to the RMSE from the cross-validations.
+```{r}
+predictions <- predict(knn_model, newdata = test_rows)
+postResample(pred = predictions, obs = test_rows$price)
+```
